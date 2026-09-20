@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Possession QC Tool</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0E1420; --panel:#141C2C; --panel-2:#1B2438; --line:#26314A;
+    --text:#E7ECF6; --text-dim:#8C97B5; --accent:#F2A93B;
+    --diff:#E5566B; --diff-bg: rgba(229,86,107,0.14); --ok:#4FBF8B;
+    --f1:#5B9BD5; --f2:#E5A54F; --radius:3px;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#F5F3EE; --panel:#FFFFFF; --panel-2:#F0EEE7; --line:#DCD7CC;
+      --text:#1B1B18; --text-dim:#6B6558; --accent:#B5651D;
+      --diff:#B33A4A; --diff-bg: rgba(179,58,74,0.10); --ok:#2F7A55;
+    }
+  }
+  :root[data-theme="dark"]{ --bg:#0E1420; --panel:#141C2C; --panel-2:#1B2438; --line:#26314A; --text:#E7ECF6; --text-dim:#8C97B5; }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--bg); color:var(--text); font-family:'IBM Plex Sans',sans-serif; min-height:100vh; }
+  .mono{ font-family:'IBM Plex Mono',monospace; }
+
+  header{ padding:16px 28px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; }
+  header h1{ margin:0; font-size:19px; font-weight:700; }
+  header h1 span{ color:var(--accent); }
+  header .files-line{ font-size:11.5px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; margin-top:3px; }
+  header .tabs{ display:flex; gap:2px; background:var(--line); border-radius:var(--radius); overflow:hidden; }
+  header .tabs button{ border:none; background:var(--panel); color:var(--text-dim); padding:8px 16px; font-size:12.5px; cursor:pointer; font-family:inherit; }
+  header .tabs button.active{ background:var(--accent); color:#1a1206; font-weight:600; }
+  header .tabs button:disabled{ opacity:.4; cursor:not-allowed; }
+  .btn{ background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:8px 14px; border-radius:var(--radius); font-size:12.5px; cursor:pointer; font-family:inherit; }
+  .btn:hover{ border-color:var(--accent); }
+  .btn.primary{ background:var(--accent); color:#1a1206; border-color:var(--accent); font-weight:600; }
+  .btn.primary:disabled{ opacity:.35; cursor:not-allowed; }
+  .btn.small{ padding:5px 10px; font-size:11.5px; }
+
+  /* ---------- Upload screen ---------- */
+  .upload-wrap{ max-width:780px; margin:6vh auto; padding:0 20px; }
+  .upload-wrap h2{ font-size:22px; margin-bottom:4px; }
+  .upload-wrap p.desc{ color:var(--text-dim); font-size:13.5px; margin-top:0; line-height:1.5; }
+  .drop-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:26px 0; }
+  .dropzone{ border:1.5px dashed var(--line); border-radius:6px; padding:26px 16px; text-align:center; cursor:pointer; background:var(--panel); transition:border-color .15s, background .15s; }
+  .dropzone:hover, .dropzone.drag{ border-color:var(--accent); background:var(--panel-2); }
+  .dropzone .tag{ font-family:'IBM Plex Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--f1); margin-bottom:8px; display:block;}
+  .dropzone.f2 .tag{ color:var(--f2); }
+  .dropzone .fname{ font-size:13px; margin-top:8px; word-break:break-all; color:var(--text); }
+  .dropzone .hint{ font-size:12px; color:var(--text-dim); margin-top:4px; }
+  .dropzone .icon{ font-size:26px; opacity:.6; }
+  .upload-actions{ display:flex; align-items:center; gap:14px; margin-top:8px; }
+  .error-box{ background:var(--diff-bg); border:1px solid var(--diff); color:var(--diff); padding:10px 14px; border-radius:var(--radius); font-size:13px; margin-top:14px; }
+  .warn-box{ background:rgba(242,169,59,0.12); border:1px solid var(--accent); color:var(--accent); padding:10px 14px; border-radius:var(--radius); font-size:12.5px; margin-top:14px; line-height:1.5; }
+
+  /* ---------- Stats strip ---------- */
+  .stats-strip{ display:flex; gap:1px; background:var(--line); border-bottom:1px solid var(--line); overflow-x:auto; }
+  .stat-chip{ background:var(--panel); padding:10px 14px; min-width:104px; cursor:pointer; border:none; color:var(--text); font-family:inherit; text-align:left; flex:1 0 auto; }
+  .stat-chip:hover{ background:var(--panel-2); }
+  .stat-chip.active{ background:var(--panel-2); box-shadow:inset 0 -2px 0 var(--accent); }
+  .stat-chip .n{ font-family:'IBM Plex Mono',monospace; font-size:16px; font-weight:600; }
+  .stat-chip .n.zero{ color:var(--text-dim); }
+  .stat-chip .n.nz{ color:var(--diff); }
+  .stat-chip .lbl{ font-size:10px; color:var(--text-dim); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* ---------- Dashboard layout ---------- */
+  .layout{ display:flex; height:calc(100vh - 210px); min-height:440px; }
+  .sidebar{ width:300px; border-right:1px solid var(--line); display:flex; flex-direction:column; background:var(--panel); }
+  .sidebar .controls{ padding:12px; border-bottom:1px solid var(--line); display:flex; flex-direction:column; gap:8px; }
+  .sidebar input[type=text]{ background:var(--panel-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius); padding:7px 9px; font-size:13px; font-family:inherit; width:100%; }
+  .toggle-row{ display:flex; align-items:center; justify-content:space-between; font-size:12.5px; color:var(--text-dim); }
+  .toggle-row label{ display:flex; align-items:center; gap:6px; cursor:pointer; }
+  .count-line{ font-size:11.5px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; }
+  .poss-list{ overflow-y:auto; flex:1; }
+  .poss-row{ padding:9px 14px; border-bottom:1px solid var(--line); cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .poss-row:hover{ background:var(--panel-2); }
+  .poss-row.selected{ background:var(--panel-2); box-shadow:inset 3px 0 0 var(--accent); }
+  .poss-row .left{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .poss-row .idx{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text-dim); }
+  .poss-row .clock{ font-size:12.5px; font-family:'IBM Plex Mono',monospace; }
+  .poss-row .badge{ font-family:'IBM Plex Mono',monospace; font-size:11px; padding:2px 6px; border-radius:10px; background:var(--diff-bg); color:var(--diff); min-width:20px; text-align:center; flex-shrink:0; }
+  .poss-row .badge.zero{ background:transparent; color:var(--ok); }
+  .detail{ flex:1; overflow-y:auto; padding:22px 30px 60px; }
+  .detail .empty{ color:var(--text-dim); margin-top:60px; text-align:center; font-size:13.5px; }
+  .detail-header{ display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:10px; margin-bottom:4px;}
+  .detail-header h2{ margin:0; font-size:18px; }
+  .detail-header .period-clock{ font-family:'IBM Plex Mono',monospace; color:var(--accent); font-size:14px; }
+  .pbp{ margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .pbp .col{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; font-size:12.5px; color:var(--text-dim); }
+  .pbp .col .who{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px; display:block; }
+  .pbp .col.f1 .who{ color:var(--f1); }
+  .pbp .col.f2 .who{ color:var(--f2); }
+  table.compare{ width:100%; border-collapse:collapse; margin-top:20px; }
+  table.compare th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-dim); font-weight:600; padding:8px 10px; border-bottom:1px solid var(--line); }
+  table.compare th.f1col{ color:var(--f1); }
+  table.compare th.f2col{ color:var(--f2); }
+  table.compare td{ padding:9px 10px; border-bottom:1px solid var(--line); font-size:13px; vertical-align:top; }
+  table.compare tr.diff td.val{ background:var(--diff-bg); }
+  table.compare td.field{ color:var(--text-dim); font-family:'IBM Plex Mono',monospace; font-size:12px; white-space:nowrap; }
+  table.compare td.val{ font-family:'IBM Plex Mono',monospace; font-size:12.5px; }
+  table.compare tr.diff td.field{ color:var(--diff); }
+  table.compare tr.diff td.field::after{ content:" ●"; }
+
+  /* ---------- Table (grid) view ---------- */
+  .table-toolbar{ display:flex; justify-content:space-between; align-items:center; padding:12px 20px; border-bottom:1px solid var(--line); gap:10px; flex-wrap:wrap; }
+  .table-toolbar.errors-toolbar{ align-items:flex-start; }
+  .errors-filters{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .errors-filters input[type=text], .errors-filters select{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius);
+    padding:6px 9px; font-size:12px; font-family:inherit; max-width:180px;
+  }
+  .errors-right{ display:flex; align-items:center; gap:12px; flex-shrink:0; }
+  .ms-wrap{ position:relative; }
+  .ms-toggle{ min-width:140px; text-align:left; }
+  .ms-panel{
+    position:absolute; top:calc(100% + 4px); left:0; z-index:20; min-width:240px; max-width:300px;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:0 8px 24px rgba(0,0,0,0.35); padding:8px; max-height:280px; display:flex; flex-direction:column;
+  }
+  .ms-actions{ display:flex; gap:10px; padding:2px 4px 8px; border-bottom:1px solid var(--line); margin-bottom:6px; }
+  .ms-link{ background:none; border:none; color:var(--accent); font-size:11px; cursor:pointer; padding:0; font-family:inherit; }
+  #err-type-options{ overflow-y:auto; display:flex; flex-direction:column; gap:1px; }
+  .ms-option{ display:flex; align-items:center; gap:8px; padding:5px 6px; border-radius:3px; cursor:pointer; font-size:12px; }
+  .ms-option:hover{ background:var(--panel-2); }
+  .ms-option input{ margin:0; flex-shrink:0; }
+  .ms-option .swatch{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .ms-option span.lbl{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .grid-wrap{ overflow:auto; height:calc(100vh - 256px); }
+  table.grid{ border-collapse:collapse; font-size:12px; white-space:nowrap; }
+  table.grid th, table.grid td{ padding:6px 9px; border-bottom:1px solid var(--line); border-right:1px solid var(--line); }
+  table.grid thead th{ position:sticky; top:0; background:var(--panel-2); z-index:2; font-family:'IBM Plex Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-dim); }
+  table.grid td.idxcol, table.grid th.idxcol{ position:sticky; left:0; background:var(--panel); z-index:1; }
+  table.grid td.f1{ color:var(--f1); }
+  table.grid td.f2{ color:var(--f2); }
+  table.grid td.f1.diff, table.grid td.f2.diff{ background:var(--diff-bg); font-weight:600; }
+
+  /* ---------- QC Errors view ---------- */
+  table.errors{ border-collapse:collapse; font-size:12.5px; width:100%; }
+  table.errors th, table.errors td{ padding:8px 12px; border-bottom:1px solid var(--line); text-align:left; }
+  table.errors thead th{ position:sticky; top:0; background:var(--panel-2); z-index:2; font-family:'IBM Plex Mono',monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-dim); }
+  table.errors td.gameid{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-dim); }
+  table.errors td.time{ font-family:'IBM Plex Mono',monospace; }
+  .badge-pill{ display:inline-block; padding:4px 10px; border-radius:4px; font-size:11.5px; font-weight:600; color:#fff; white-space:nowrap; }
+  .errors-wrap{ overflow:auto; height:calc(100vh - 280px); }
+  .empty-errors{ padding:60px 20px; text-align:center; color:var(--text-dim); font-size:13.5px; }
+
+  .sheet-bar{ display:flex; align-items:center; gap:8px; padding:10px 20px 0; flex-wrap:wrap; }
+  .sheet-lbl{ font-size:11.5px; color:var(--text-dim); white-space:nowrap; }
+  .sheet-bar input[type=text], .sheet-bar input[type=password]{
+    background:var(--panel-2); border:1px solid var(--line); color:var(--text); border-radius:var(--radius);
+    padding:6px 9px; font-size:12px; font-family:inherit; min-width:160px;
+  }
+  #sheet-url{ flex:1 1 320px; }
+  .sheet-key-input{ flex:0 1 180px; }
+  .sheet-tab-input{ flex:0 1 220px; }
+  .sheet-check{ display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--text-dim); white-space:nowrap; cursor:pointer; }
+  .sheet-status{ font-size:11.5px; color:var(--text-dim); white-space:normal; max-width:520px; line-height:1.4; }
+  .sheet-status.ok{ color:var(--ok); }
+  .sheet-status.err{ color:var(--diff); }
+  .sheet-bar-note{ padding:4px 20px 0; font-size:11px; color:var(--text-dim); }
+  .sheet-help-link{ color:var(--accent); }
+  td.analyst-none{ color:var(--text-dim); font-style:italic; }
+
+  ::-webkit-scrollbar{ width:9px; height:9px; }
+  ::-webkit-scrollbar-thumb{ background:var(--line); border-radius:5px; }
+  .hidden{ display:none !important; }
+
+  /* ---------- Login gate ---------- */
+  #login-overlay{
+    position:fixed; inset:0; background:var(--bg); z-index:100;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .login-card{
+    width:100%; max-width:340px; background:var(--panel); border:1px solid var(--line);
+    border-radius:8px; padding:28px 26px; text-align:center;
+  }
+  .login-card .icon{ font-size:30px; margin-bottom:6px; }
+  .login-card h2{ margin:0 0 4px; font-size:17px; }
+  .login-card p{ margin:0 0 18px; font-size:12.5px; color:var(--text-dim); line-height:1.5; }
+  .login-card input[type=password]{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    border-radius:var(--radius); padding:10px 12px; font-size:14px; font-family:inherit; margin-bottom:10px;
+    text-align:center; letter-spacing:1px;
+  }
+  .login-card .btn.primary{ width:100%; padding:10px; font-size:13px; }
+  .login-card .login-error{ color:var(--diff); font-size:12px; margin-top:10px; min-height:14px; }
+  .login-card .login-ok{ color:var(--ok); font-size:12px; margin-top:10px; min-height:14px; }
+  .login-card input[type=text]{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); color:var(--text);
+    border-radius:var(--radius); padding:10px 12px; font-size:14px; font-family:inherit; margin-bottom:10px;
+    text-align:center;
+  }
+  .login-link{ background:none; border:none; color:var(--accent); font-size:12px; cursor:pointer; margin-top:12px; text-decoration:underline; font-family:inherit; }
+  .login-note{ font-size:11px; color:var(--text-dim); margin-top:14px; line-height:1.5; text-align:left; background:var(--panel-2); padding:8px 10px; border-radius:var(--radius); }
+  @media (max-width:760px){ .layout{ flex-direction:column; height:auto; } .sidebar{ width:100%; max-height:320px; } .pbp{ grid-template-columns:1fr; } .drop-grid{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<!-- ================= LOGIN GATE ================= -->
+<div id="login-overlay">
+  <form class="login-card" id="login-form">
+    <div class="icon">🔒</div>
+    <h2>Possession QC Tool</h2>
+    <p>Sign in to continue. Access resets when this browser tab is closed.</p>
+    <input type="text" id="login-id" placeholder="Login ID" autocomplete="username" autofocus>
+    <input type="password" id="login-pw" placeholder="Password" autocomplete="current-password">
+    <button type="submit" class="btn primary">Unlock</button>
+    <div class="login-error" id="login-error"></div>
+  </form>
+</div>
+
+<div id="app-shell" class="hidden">
+<header>
+  <div>
+    <h1>Possession <span>QC</span> Tool</h1>
+    <div class="files-line" id="files-line"></div>
+  </div>
+  <div class="tabs">
+    <button id="tab-upload" class="active">Upload</button>
+    <button id="tab-dashboard" disabled>Dashboard</button>
+    <button id="tab-table" disabled>Table</button>
+    <button id="tab-errors" disabled>QC Errors</button>
+  </div>
+  <button class="btn small" id="logoutBtn" style="margin-left:8px;">Log out</button>
+</header>
+
+<!-- ================= UPLOAD SCREEN ================= -->
+<div id="screen-upload">
+  <div class="upload-wrap">
+    <h2>Compare QC JSON vs Anno JSON</h2>
+    <p class="desc">Upload the <strong>QC JSON</strong> (reference / graded file) and the <strong>Anno JSON</strong> (annotator's file). Possessions are matched in order and compared field by field, then every mismatch is classified into an Error Type and Severity using your QC rules, ready to export as a CSV in your dashboard's format.</p>
+
+    <div class="drop-grid">
+      <div class="dropzone f1" id="drop1">
+        <span class="tag">QC JSON</span>
+        <div class="icon">⬆</div>
+        <div class="hint">Click or drop a .json file</div>
+        <div class="fname" id="fname1"></div>
+      </div>
+      <div class="dropzone f2" id="drop2">
+        <span class="tag">Anno JSON</span>
+        <div class="icon">⬆</div>
+        <div class="hint">Click or drop a .json file</div>
+        <div class="fname" id="fname2"></div>
+      </div>
+      <input type="file" id="file1" accept="application/json,.json" class="hidden">
+      <input type="file" id="file2" accept="application/json,.json" class="hidden">
+    </div>
+
+    <div class="upload-actions">
+      <button class="btn primary" id="compareBtn" disabled>Compare files</button>
+      <button class="btn small" id="resetBtn">Reset</button>
+    </div>
+    <div id="msgBox"></div>
+  </div>
+</div>
+
+<!-- ================= DASHBOARD SCREEN ================= -->
+<div id="screen-dashboard" class="hidden">
+  <div class="stats-strip" id="stats-strip"></div>
+  <div class="layout">
+    <div class="sidebar">
+      <div class="controls">
+        <input type="text" id="search" placeholder="Search clock, period, player, text…">
+        <div class="toggle-row"><label><input type="checkbox" id="diffOnly"> Only possessions with a diff</label></div>
+        <div class="count-line" id="count-line"></div>
+      </div>
+      <div class="poss-list" id="poss-list"></div>
+    </div>
+    <div class="detail" id="detail"><div class="empty">Select a possession on the left to see the full side-by-side comparison.</div></div>
+  </div>
+</div>
+
+<!-- ================= TABLE SCREEN ================= -->
+<div id="screen-table" class="hidden">
+  <div class="table-toolbar">
+    <div class="count-line" id="table-count"></div>
+    <button class="btn small" id="exportCsv">Export CSV</button>
+  </div>
+  <div class="grid-wrap"><table class="grid" id="grid-table"></table></div>
+</div>
+
+<!-- ================= QC ERRORS SCREEN ================= -->
+<div id="screen-errors" class="hidden">
+  <div style="padding:10px 20px 0; font-size:12px; color:var(--text-dim);">QC JSON is the reference — every row below is an error found in the <strong style="color:var(--f2);">Anno JSON</strong>. The QC JSON is never flagged or changed.</div>
+  <div class="sheet-bar" id="sheet-bar">
+    <span class="sheet-lbl">Analyst sheet:</span>
+    <input type="text" id="sheet-url" placeholder="Google Sheet URL">
+    <input type="text" id="sheet-tab-name" placeholder="Tab name (e.g. Dashboard Matches)" class="sheet-tab-input">
+    <input type="password" id="sheet-api-key" placeholder="Sheets API key" class="sheet-key-input">
+    <button class="btn small" id="sheet-load">Load</button>
+    <label class="sheet-check"><input type="checkbox" id="sheet-autorefresh"> Auto-refresh (30s)</label>
+    <span class="sheet-status" id="sheet-status">Not loaded</span>
+  </div>
+  <div class="sheet-bar-note">Live data via the Google Sheets API (no CSV export) — needs an API key with the Sheets API enabled. Fill in the tab name to read a specific sub-sheet directly instead of relying on the URL's gid. <a href="https://console.cloud.google.com/apis/library/sheets.googleapis.com" target="_blank" rel="noopener" class="sheet-help-link">Enable the API &amp; create a key</a></div>
+  <div class="table-toolbar errors-toolbar">
+    <div class="errors-filters">
+      <input type="text" id="err-search" placeholder="Search game id, time…">
+      <select id="err-period"><option value="">All Quarters/Halves</option></select>
+      <div class="ms-wrap" id="err-type-wrap">
+        <button type="button" class="btn small ms-toggle" id="err-type-toggle">All Error Types</button>
+        <div class="ms-panel hidden" id="err-type-panel">
+          <div class="ms-actions">
+            <button type="button" class="ms-link" id="err-type-all">Select all</button>
+            <button type="button" class="ms-link" id="err-type-none">Clear</button>
+          </div>
+          <div id="err-type-options"></div>
+        </div>
+      </div>
+      <select id="err-severity"><option value="">All Severities</option></select>
+      <button class="btn small" id="err-clear">Clear filters</button>
+    </div>
+    <div class="errors-right">
+      <div class="count-line" id="errors-count"></div>
+      <button class="btn small" id="exportErrorsCsv">Export CSV</button>
+    </div>
+  </div>
+  <div class="errors-wrap">
+    <table class="errors" id="errors-table"></table>
+    <div class="empty-errors hidden" id="errors-empty"></div>
+  </div>
+</div>
+</div><!-- /app-shell -->
+
+<script>
+/* ============ login gate ============
+   Client-side only: this hides the tool from casual/uninvited use, but this is a
+   static HTML file with no server, so it is not real security — anyone with dev
+   tools can bypass it. There is no password-reset flow; the password below is fixed. */
+const LOGIN_ID = "ganeshsprivan";
+const PASSWORD_HASH = "fdca1a90153c71a286786552743d9a64bdccb3d0e2f7e87542e00fb34c6a36f8"; // sha256("Mahakal@512")
+const AUTH_KEY = 'qc_tool_auth_v1';
+
+async function sha256Hex(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function showApp(){
+  document.getElementById('login-overlay').classList.add('hidden');
+  document.getElementById('app-shell').classList.remove('hidden');
+}
+function showLoginForm(){
+  document.getElementById('app-shell').classList.add('hidden');
+  document.getElementById('login-overlay').classList.remove('hidden');
+  document.getElementById('login-form').classList.remove('hidden');
+  document.getElementById('login-pw').value = '';
+  document.getElementById('login-error').textContent = '';
+  document.getElementById('login-id').focus();
+}
+
+document.getElementById('login-form').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const id = document.getElementById('login-id').value.trim();
+  const pw = document.getElementById('login-pw').value;
+  const hash = await sha256Hex(pw);
+  const errEl = document.getElementById('login-error');
+  if(id.toLowerCase() === LOGIN_ID.toLowerCase() && hash === PASSWORD_HASH){
+    sessionStorage.setItem(AUTH_KEY, '1');
+    errEl.textContent = '';
+    showApp();
+  }else{
+    errEl.textContent = 'Incorrect ID or password.';
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', ()=>{
+  sessionStorage.removeItem(AUTH_KEY);
+  showLoginForm();
+});
+if(sessionStorage.getItem(AUTH_KEY) === '1'){ showApp(); } else { showLoginForm(); }
+
+/* ============ extraction logic (ported from the possessiondata schema) ============ */
+const SCREEN_SUBTYPES = [
+  ["LeftWing","ballScreensLeftWing"],["MidWing","ballScreensMiddleWing"],["RightWing","ballScreensRightWing"],
+  ["P&Pop","ballScreensPickAndPop"],["P&R","ballScreensPickAndRoll"],["P&ShortRoll","ballScreensPickAndShortRoll"],
+  ["ScreenedShot","ballScreensScreenedShot"],["Handoff","ballScreensHandoff"],["Drag","ballScreensDrag"],
+  ["Pop","ballScreensPop"],["Roll","ballScreensRoll"],["Slip","ballScreensSlip"],["ShortRoll","ballScreensShortRoll"],
+  ["Reject","ballScreensReject"],["ReScreen","ballScreensReScreen"],["Stay","ballScreensStay"],["StepUp","ballScreensStepUp"],
+  ["Snake","ballScreensSnake"],["Split","ballScreensSplit"],["Other","ballScreensOther"],
+];
+const SHOT_TYPE_ATTRS = ["LAYUP","DRIVINGLAYUP","JUMPSHOT","PULLUPJUMPSHOT","FLOATINGJUMPSHOT","STEPBACKJUMPSHOT","TURNAROUNDJUMPSHOT","TIPINLAYUP"];
+
+function screenSummary(events){
+  events = events || {};
+  const total = events.ballScreens || 0;
+  const parts = [];
+  for(const [label,key] of SCREEN_SUBTYPES){
+    const v = events[key] || 0;
+    if(v) parts.push(`${label}:${v}`);
+  }
+  if(total===0 && parts.length===0) return "0";
+  return parts.length ? `${total} (${parts.join(", ")})` : String(total);
+}
+
+function ballScreenPlayers(item){
+  const out = [];
+  for(const pe of (item.predictedEvents||[])){
+    if(pe.type !== "BALL_SCREEN") continue;
+    const bh = pe.ballHandlerPlayerId, bhd = pe.ballHandlerDefenderPlayerId;
+    const screeners = pe.screenerPlayerIds || [];
+    const screenerDefs = pe.screenerDefenderPlayerIds || [];
+    const offActions = Object.keys(pe.offensiveActions||{}).join(",") || "-";
+    const defActions = Object.keys(pe.defensiveActions||{}).join(",") || "-";
+    out.push(`BH:${bh}(def ${bhd}) x Scr:${screeners.join(",")}(def ${screenerDefs.join(",")}) [Off:${offActions} / Def:${defActions}]`);
+  }
+  return out.length ? out.join(" | ") : "-";
+}
+
+function extract(item){
+  item = item || {};
+  const events = item.events || {};
+  const labeled = item.labeledEvents || {};
+  const poss = item.possessions || [];
+  const shot = item.shot || {};
+  const attrs = shot.attributes || [];
+
+  const passes = (labeled.passes ?? events.passes);
+  const screens = screenSummary(events);
+  const offense = (labeled.offenses||[]).join(", ") || "-";
+  const defense = (labeled.defenses||[]).join(", ") || "-";
+  const shotClockEnd = poss.length ? poss[poss.length-1].shotClock : null;
+
+  let direction = "-";
+  if(attrs.includes("DIRECTIONLEFT")) direction = "LEFT";
+  else if(attrs.includes("DIRECTIONRIGHT")) direction = "RIGHT";
+
+  let contested = "-";
+  if(attrs.includes("GUARDED")) contested = "GUARDED";
+  else if(attrs.includes("UNGUARDED")) contested = "UNGUARDED";
+
+  const shotType = attrs.find(a=>SHOT_TYPE_ATTRS.includes(a)) || "-";
+  const otherAttrs = attrs.filter(a=>!["DIRECTIONLEFT","DIRECTIONRIGHT","GUARDED","UNGUARDED",...SHOT_TYPE_ATTRS].includes(a));
+  const shotResult = shot.st;
+  const shotAction = ([shotResult].filter(Boolean).concat(otherAttrs)).join(", ") || "-";
+
+  const shotDefenders = (shot.shotDefenders||[]).join(", ") || "-";
+  const deflected = (labeled.passDeflectedBy||[]).join(", ") || "-";
+
+  let reversals = labeled.ballReversals;
+  if(reversals===undefined || reversals===null) reversals = events.ballReversals;
+
+  let paintTouch = labeled.paintTouch;
+  if(paintTouch===undefined || paintTouch===null) paintTouch = events.paintTouch;
+
+  const offenseOnCourt = (item.lineupPlayers||[]).slice().sort((a,b)=>String(a).localeCompare(String(b))).join(",") || "-";
+  const defenseOnCourt = (item.opponentLineupPlayers||[]).slice().sort((a,b)=>String(a).localeCompare(String(b))).join(",") || "-";
+  const possessionOutcome = `pts:${events.points ?? '-'} TO:${events.turnover ?? '-'}`;
+  const validFlag = String(item.valid ?? '-');
+
+  return {
+    id:item.id, period:item.period, start:item.startGameClock, end:item.endGameClock,
+    passes, screens, screenDetail: ballScreenPlayers(item), offense, defense,
+    offenseOnCourt, defenseOnCourt,
+    shotClockEnd, shotType, shotAction, contested, direction,
+    isoPlayer: item.isoPlayerId ?? "-",
+    inbounds: labeled.inbound ?? "-",
+    deflectedPass: deflected, shotDefenders, reversals, paintTouch,
+    possessionOutcome, validFlag,
+    videoTimeStart: labeled.videoTimeMark ?? "-",
+    playByPlay: item.playByPlayDescription,
+  };
+}
+
+const FIELD_LABELS = {
+  start:'Start', end:'End', videoTimeStart:'Video Time Start', passes:'Passes',
+  reversals:'Reversals', isoPlayer:'ISO Player', inbounds:'Inbounds', deflectedPass:'Deflected Pass',
+  paintTouch:'Paint Touch', offense:'Offence Action', offenseOnCourt:'Offence On Court',
+  defense:'Defence Action', defenseOnCourt:'Defence On Court',
+  screens:'Ball Screens', screenDetail:'Ball Screen Player/Action',
+  shotClockEnd:'ShotClockEnd', shotType:'Shot Type', shotAction:'Shot Action',
+  contested:'Contested', direction:'Direction', shotDefenders:'Shot Defenders',
+  possessionOutcome:'Possession Outcome', validFlag:'Valid',
+};
+const FIELD_ORDER = Object.keys(FIELD_LABELS);
+
+/* Start/End/Video-Time comparisons tolerate small clock drift (frame rounding,
+   different capture offsets) — differences of up to 2 seconds are not flagged. */
+const TIME_TOLERANCE_SECONDS = 2;
+function parseClockSeconds(str, mode){
+  if(str===null || str===undefined || str==='-' || str==='') return null;
+  const parts = String(str).split(':').map(Number);
+  if(parts.length !== 3 || parts.some(n=>Number.isNaN(n))) return null;
+  if(mode==='hms') return parts[0]*3600 + parts[1]*60 + parts[2];   // videoTimeStart: HH:MM:SS
+  return parts[0]*60 + parts[1] + parts[2]/100;                     // start/end: MM:SS:hundredths
+}
+function timeDiffers(v1, v2, mode){
+  const s1 = parseClockSeconds(v1, mode);
+  const s2 = parseClockSeconds(v2, mode);
+  if(s1===null || s2===null) return String(v1) !== String(v2); // fallback: not parseable as a clock
+  return Math.abs(s1 - s2) > TIME_TOLERANCE_SECONDS;
+}
+function fieldDiffers(f, e1, e2){
+  if(f==='start' || f==='end') return timeDiffers(e1[f], e2[f], 'clock');
+  if(f==='videoTimeStart') return timeDiffers(e1[f], e2[f], 'hms');
+  return String(e1[f]) !== String(e2[f]);
+}
+
+/* ============ QC error-type mapping & severity (per user's dashboard rules) ============ */
+const MAJOR_ERRORS = new Set([
+  "Start time Wrong","Video time Wrong","Shot Clock Wrong","Shot Type Wrong","Shot Action",
+  "Contested Wrong / Miss","Shot Defenders","Direction","In Bound","Passes Count Wrong / Miss",
+  "Reversal Count Wrong / Miss","ISO player","Deflected Pass","Screen Miss 1","Screen Miss 2",
+  "Screen Miss 3","Screen Miss 4","Screen Player Jersey No Wrong","Screen Time Wrong",
+  "Possession Wrong / Miss","Contested & SD Wrong/Miss","Screen Action Wrong 100%",
+]);
+const MEDIUM_ERRORS = new Set([
+  "Offence On Court","Defence On Court","50/50 Screen Wrong","Paint touch",
+  "Offence Action","Defence Action","Screen Court Location",
+]);
+function severityFor(errorType){
+  if(MAJOR_ERRORS.has(errorType)) return "Major";
+  if(MEDIUM_ERRORS.has(errorType)) return "Medium";
+  if(errorType === "Invalid Shot") return "Basic";
+  return "Unknown";
+}
+const SEVERITY_COLORS = { Major:"#C0392B", Medium:"#1E8E6E", Basic:"#C9A02C", Unknown:"#5B6472" };
+const ERROR_COLORS = {
+  "Screen Miss 2":"#B0271E", "Contested & SD Wrong/Miss":"#E38B85", "Defence Action":"#E0A85C",
+  "Defence On Court":"#D8CB6E", "Deflected Pass":"#8FC6DE", "Direction":"#C79FE0", "In Bound":"#7B4FA6",
+  "ISO player":"#5B2E8C", "Offence Action":"#14566B", "Offence On Court":"#3C8C99", "Paint touch":"#6FB6DE",
+  "Passes Count Wrong / Miss":"#8FBF6B", "Possession Wrong / Miss":"#A31E22", "Reversal Count Wrong / Miss":"#E3A98F",
+  "Screen Action Wrong 100%":"#E8A6AD", "Screen Court Location":"#2C5FA8", "Screen Miss 1":"#B0271E",
+  "Screen Miss 3":"#B0271E", "Screen Miss 4":"#B0271E", "Screen Player Jersey No Wrong":"#8FA0AE",
+  "Screen Time Wrong":"#C9A02C", "Shot Action":"#5B2E8C", "Shot Clock Wrong":"#E38B85", "Shot Type Wrong":"#8FC6DE",
+  "Start time Wrong":"#C9A02C", "Video time Wrong":"#14566B", "50/50 Screen Wrong":"#3F8F5F", "End Time Wrong":"#C9A02C",
+  "Invalid Shot":"#5B6472",
+};
+
+/* Granular ball-screen comparison → Screen Miss N / Screen Action / Jersey / Location / Time.
+   QC JSON is the reference; every entry below describes how the Anno JSON differs from it. */
+function screenErrors(raw1, raw2){
+  const out = [];
+  const s1 = (raw1.predictedEvents||[]).filter(p=>p.type==="BALL_SCREEN"); // QC
+  const s2 = (raw2.predictedEvents||[]).filter(p=>p.type==="BALL_SCREEN"); // Anno
+  const maxLen = Math.max(s1.length, s2.length);
+  for(let i=0;i<maxLen;i++){
+    const a = s1[i], b = s2[i];
+    const path = `predictedEvents[BALL_SCREEN #${i+1}]`;
+    if(!a || !b){
+      if(i < 4){
+        out.push({
+          type: `Screen Miss ${i+1}`, field: path,
+          qcVal: a ? 'Present' : 'Missing', annoVal: b ? 'Present' : 'Missing',
+        });
+      }
+      continue;
+    }
+    const offA = Object.keys(a.offensiveActions||{}).sort().join(',');
+    const offB = Object.keys(b.offensiveActions||{}).sort().join(',');
+    const defA = Object.keys(a.defensiveActions||{}).sort().join(',');
+    const defB = Object.keys(b.defensiveActions||{}).sort().join(',');
+    if(offA!==offB || defA!==defB){
+      out.push({ type:"Screen Action Wrong 100%", field:`${path}.offensiveActions/defensiveActions`,
+        qcVal:`off:${offA||'-'} def:${defA||'-'}`, annoVal:`off:${offB||'-'} def:${defB||'-'}` });
+    }
+
+    const screenersA = (a.screenerPlayerIds||[]).slice().sort().join(',');
+    const screenersB = (b.screenerPlayerIds||[]).slice().sort().join(',');
+    if(screenersA !== screenersB){
+      out.push({ type:"Screen Player Jersey No Wrong", field:`${path}.screenerPlayerIds`, qcVal:screenersA||'-', annoVal:screenersB||'-' });
+    }
+
+    const locA = `${a.wing ?? ''}|${a.screenerX ?? ''}|${a.screenerY ?? ''}`;
+    const locB = `${b.wing ?? ''}|${b.screenerX ?? ''}|${b.screenerY ?? ''}`;
+    if(locA !== locB){
+      out.push({ type:"Screen Court Location", field:`${path}.wing/screenerX/screenerY`, qcVal:locA, annoVal:locB });
+    }
+
+    const timeA = a.videoTimeMarkStart ?? a.timestamp ?? '';
+    const timeB = b.videoTimeMarkStart ?? b.timestamp ?? '';
+    if(String(timeA) !== String(timeB)){
+      out.push({ type:"Screen Time Wrong", field:`${path}.videoTimeMarkStart`, qcVal:String(timeA)||'-', annoVal:String(timeB)||'-' });
+    }
+  }
+  return out;
+}
+
+/* Every error object is one-directional: QC JSON is the source of truth, and qcVal/annoVal
+   describe where the Anno JSON's value is missing, incorrect, or mismatched against it.
+   Nothing here ever flags or alters the QC JSON itself. */
+function computeErrorsForRow(row){
+  const errors = [];
+  const f1=row.f1, f2=row.f2; // f1 = QC (reference), f2 = Anno (checked against it)
+  const add = (type, field, qcVal, annoVal) => errors.push({ type, field, qcVal: qcVal ?? '-', annoVal: annoVal ?? '-' });
+
+  if(fieldDiffers('start', f1, f2)) add("Start time Wrong", "startGameClock", f1.start, f2.start);
+  if(fieldDiffers('end', f1, f2)) add("End Time Wrong", "endGameClock", f1.end, f2.end);
+  if(fieldDiffers('videoTimeStart', f1, f2)) add("Video time Wrong", "labeledEvents.videoTimeMark", f1.videoTimeStart, f2.videoTimeStart);
+  if(f1.shotClockEnd !== f2.shotClockEnd) add("Shot Clock Wrong", "possessions[last].shotClock", f1.shotClockEnd, f2.shotClockEnd);
+  if(String(f1.passes) !== String(f2.passes)) add("Passes Count Wrong / Miss", "labeledEvents.passes", f1.passes, f2.passes);
+  if(String(f1.reversals) !== String(f2.reversals)) add("Reversal Count Wrong / Miss", "labeledEvents.ballReversals", f1.reversals, f2.reversals);
+  if(f1.isoPlayer !== f2.isoPlayer) add("ISO player", "isoPlayerId", f1.isoPlayer, f2.isoPlayer);
+  if(f1.inbounds !== f2.inbounds) add("In Bound", "labeledEvents.inbound", f1.inbounds, f2.inbounds);
+  if(f1.deflectedPass !== f2.deflectedPass) add("Deflected Pass", "labeledEvents.passDeflectedBy", f1.deflectedPass, f2.deflectedPass);
+  if(String(f1.paintTouch) !== String(f2.paintTouch)) add("Paint touch", "labeledEvents.paintTouch", f1.paintTouch, f2.paintTouch);
+  if(f1.offense !== f2.offense) add("Offence Action", "labeledEvents.offenses", f1.offense, f2.offense);
+  if(f1.defense !== f2.defense) add("Defence Action", "labeledEvents.defenses", f1.defense, f2.defense);
+  if(f1.offenseOnCourt !== f2.offenseOnCourt) add("Offence On Court", "lineupPlayers", f1.offenseOnCourt, f2.offenseOnCourt);
+  if(f1.defenseOnCourt !== f2.defenseOnCourt) add("Defence On Court", "opponentLineupPlayers", f1.defenseOnCourt, f2.defenseOnCourt);
+  if(f1.direction !== f2.direction) add("Direction", "shot.attributes (DIRECTION)", f1.direction, f2.direction);
+  if(f1.shotType !== f2.shotType) add("Shot Type Wrong", "shot.attributes (shot type)", f1.shotType, f2.shotType);
+  if(f1.shotAction !== f2.shotAction) add("Shot Action", "shot.st / shot.attributes", f1.shotAction, f2.shotAction);
+  if(f1.validFlag !== f2.validFlag) add("Invalid Shot", "valid", f1.validFlag, f2.validFlag);
+  if(f1.possessionOutcome !== f2.possessionOutcome) add("Possession Wrong / Miss", "events.points / events.turnover", f1.possessionOutcome, f2.possessionOutcome);
+
+  const contestedDiff = f1.contested !== f2.contested;
+  const sdDiff = f1.shotDefenders !== f2.shotDefenders;
+  if(contestedDiff && sdDiff) add("Contested & SD Wrong/Miss", "shot.attributes (GUARDED) + shot.shotDefenders", `${f1.contested} / ${f1.shotDefenders}`, `${f2.contested} / ${f2.shotDefenders}`);
+  else if(contestedDiff) add("Contested Wrong / Miss", "shot.attributes (GUARDED/UNGUARDED)", f1.contested, f2.contested);
+  else if(sdDiff) add("Shot Defenders", "shot.shotDefenders", f1.shotDefenders, f2.shotDefenders);
+
+  errors.push(...screenErrors(row.raw1, row.raw2));
+  return errors;
+}
+
+/* ============ state ============ */
+let DATA = null;
+let activeFieldFilter = null;
+let selectedIdx = null;
+let downloadsCap = null;
+let files = { a: null, b: null };
+let errFilters = { search:'', period:'', errorTypes:new Set(), severity:'' };
+
+/* ============ Google Sheet analyst/QC matching ============
+   Live-fetches a Google Sheet via the Sheets API v4 (JSON, not a CSV export)
+   using an API key, each time Load is clicked (or on the auto-refresh timer).
+   The sheet must be shared "Anyone with the link can view" since an API key
+   has no user identity — it's a read-only, unauthenticated public request.
+   Builds a map keyed by Game ID with the annotation analyst per Q1-Q4 (or
+   H1/H2) and the QC Analyst Name, so the QC Errors table can look each row's
+   analyst up automatically. */
+const DEFAULT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1fZQdr39GK_I8wnSUSzKsiarc0m_js3fFE5A8evLr9Yc/edit?gid=856007914#gid=856007914";
+const SHEET_API_KEY_STORAGE = 'qc_tool_sheet_api_key_v1';
+const SHEET_TAB_NAME_STORAGE = 'qc_tool_sheet_tab_name_v1';
+let ANALYST_MAP = {};          // gameId -> { q1,q2,q3,q4,h1,h2, qcAnalystName }
+let sheetStatus = { loaded:false, loading:false, error:null, count:0 };
+let sheetAutoRefreshTimer = null;
+
+function parseSheetUrl(url){
+  const idMatch = String(url||'').match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  const gidMatch = String(url||'').match(/[?#&]gid=(\d+)/);
+  if(!idMatch) return null;
+  return { id: idMatch[1], gid: gidMatch ? gidMatch[1] : '0' };
+}
+
+function normHeader(h){ return String(h||'').trim().toLowerCase().replace(/[^a-z0-9]/g,''); }
+function findCol(headers, candidates){
+  for(const cand of candidates){
+    const idx = headers.indexOf(normHeader(cand));
+    if(idx !== -1) return idx;
+  }
+  return -1;
+}
+
+/* The real column headers aren't always row 1 — sheets often have a banner,
+   link, or summary row above the actual table. Scan the first HEADER_SCAN
+   rows for the one that actually contains a "Game ID" cell and treat that
+   as the header row. */
+const HEADER_SCAN_ROWS = 15;
+function findHeaderRowIndex(rows){
+  const maxScan = Math.min(rows.length, HEADER_SCAN_ROWS);
+  for(let i=0;i<maxScan;i++){
+    const headers = (rows[i]||[]).map(normHeader);
+    if(findCol(headers, ['game id','gameid']) !== -1) return i;
+  }
+  return -1;
+}
+
+/* rows: array of arrays (as returned by the Sheets API values.get). Returns
+   { map, headerRowIndex, headers } — headerRowIndex is -1 when no row in the
+   first HEADER_SCAN_ROWS has a "Game ID" cell. */
+function buildAnalystMap(rows){
+  const result = { map:{}, headerRowIndex:-1, headers:[] };
+  if(!rows || !rows.length) return result;
+  const headerRowIndex = findHeaderRowIndex(rows);
+  result.headerRowIndex = headerRowIndex;
+  if(headerRowIndex === -1) return result;
+  const rawHeaders = rows[headerRowIndex];
+  result.headers = rawHeaders.map(h => String(h||'').trim()).filter(Boolean);
+  const headers = rawHeaders.map(normHeader);
+  const cols = {
+    gameId: findCol(headers, ['game id','gameid']),
+    q1: findCol(headers, ['q1']),
+    q2: findCol(headers, ['q2']),
+    q3: findCol(headers, ['q3']),
+    q4: findCol(headers, ['q4']),
+    h1: findCol(headers, ['h1']),
+    h2: findCol(headers, ['h2']),
+    qcAnalyst: findCol(headers, ['qc analyst name','qcanalystname','qc analyst']),
+  };
+  for(let i=headerRowIndex+1;i<rows.length;i++){
+    const r = rows[i];
+    const gid = (r[cols.gameId]||'').trim();
+    if(!gid) continue;
+    const get = c => c>-1 ? String(r[c]||'').trim() : '';
+    result.map[gid] = {
+      q1:get(cols.q1), q2:get(cols.q2), q3:get(cols.q3), q4:get(cols.q4),
+      h1:get(cols.h1), h2:get(cols.h2),
+      qcAnalystName:get(cols.qcAnalyst),
+    };
+  }
+  return result;
+}
+
+function setSheetStatus(){
+  const el = document.getElementById('sheet-status');
+  el.classList.remove('ok','err');
+  if(sheetStatus.loading){ el.textContent = 'Loading…'; return; }
+  if(sheetStatus.error){ el.textContent = sheetStatus.error; el.classList.add('err'); return; }
+  if(sheetStatus.loaded){ el.textContent = `Live · ${sheetStatus.count} games`; el.classList.add('ok'); return; }
+  el.textContent = 'Not loaded';
+}
+
+/* Calls the real Sheets API v4 (sheets.googleapis.com) — a live request every
+   time, returning structured JSON rows, never a cached CSV export. First
+   resolves the gid to a tab title (values.get needs a sheet name, not a gid),
+   then pulls that tab's values. */
+/* Calls the real Sheets API v4 (sheets.googleapis.com) — a live request every
+   time, returning structured JSON rows, never a cached CSV export. If a tab
+   name is given, it's used directly (most reliable); otherwise the gid from
+   the URL is resolved to a tab name via metadata first. */
+async function fetchSheetRows(spreadsheetId, gid, apiKey, tabNameOverride){
+  let target;
+  let allTabTitles = [tabNameOverride].filter(Boolean);
+  if(tabNameOverride){
+    target = { title: tabNameOverride };
+  } else {
+    const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?key=${encodeURIComponent(apiKey)}&fields=sheets.properties`;
+    const metaRes = await fetch(metaUrl);
+    if(!metaRes.ok){
+      const body = await metaRes.json().catch(()=>null);
+      throw new Error((body && body.error && body.error.message) || `Could not read sheet metadata (HTTP ${metaRes.status})`);
+    }
+    const meta = await metaRes.json();
+    const props = ((meta.sheets)||[]).map(s=>s.properties);
+    target = props.find(p => String(p.sheetId) === String(gid)) || props[0];
+    if(!target) throw new Error('That spreadsheet has no tabs the API can see.');
+    allTabTitles = props.map(p=>p.title);
+  }
+
+  const range = `${target.title}!A1:ZZ`;
+  const valUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?key=${encodeURIComponent(apiKey)}`;
+  const valRes = await fetch(valUrl);
+  if(!valRes.ok){
+    const body = await valRes.json().catch(()=>null);
+    const apiMsg = (body && body.error && body.error.message) || `HTTP ${valRes.status}`;
+    throw new Error(`Could not read tab "${target.title}": ${apiMsg}`);
+  }
+  const data = await valRes.json();
+  return { rows: data.values || [], tabTitle: target.title, tabCount: allTabTitles.length, allTabTitles };
+}
+
+async function loadAnalystSheet(){
+  const url = document.getElementById('sheet-url').value.trim();
+  const apiKey = document.getElementById('sheet-api-key').value.trim();
+  const tabName = document.getElementById('sheet-tab-name').value.trim();
+  const parsed = parseSheetUrl(url);
+  if(!parsed){
+    sheetStatus = { loaded:false, loading:false, error:'Invalid Google Sheet URL', count:0 };
+    setSheetStatus(); return;
+  }
+  if(!apiKey){
+    sheetStatus = { loaded:false, loading:false, error:'Enter a Sheets API key', count:0 };
+    setSheetStatus(); return;
+  }
+  sheetStatus = { loaded:false, loading:true, error:null, count:0 };
+  setSheetStatus();
+  try{
+    const { rows, tabTitle, tabCount, allTabTitles } = await fetchSheetRows(parsed.id, parsed.gid, apiKey, tabName);
+    const built = buildAnalystMap(rows);
+    ANALYST_MAP = built.map;
+    const count = Object.keys(ANALYST_MAP).length;
+    if(count === 0){
+      let msg;
+      if(!rows.length){
+        msg = `Tab "${tabTitle}" came back empty.`;
+      } else if(built.headerRowIndex === -1){
+        const preview = rows.slice(0, Math.min(rows.length, HEADER_SCAN_ROWS))
+          .map((r,i) => {
+            const cells = (r||[]).slice(0,6).map(c=>String(c||'').trim()).filter(Boolean);
+            return `Row ${i+1}: ${cells.length ? cells.join(' | ') : '(empty)'}`;
+          }).join('  ·  ');
+        msg = `No row with a "Game ID" header found in the first ${HEADER_SCAN_ROWS} rows of tab "${tabTitle}". ${preview}`;
+      } else {
+        msg = `Found the header row in tab "${tabTitle}" (headers: ${built.headers.slice(0,10).join(', ')}${built.headers.length>10?'…':''}), but no rows below it had a value in the Game ID column.`;
+      }
+      if(!tabName && tabCount > 1){
+        msg += ` (${tabCount} tabs in this sheet: ${allTabTitles.join(', ')} — wrong gid in the URL picks the wrong one, or type the tab name in the box.)`;
+      }
+      sheetStatus = { loaded:false, loading:false, error: msg, count:0 };
+    } else {
+      sheetStatus = { loaded:true, loading:false, error:null, count };
+      try{
+        localStorage.setItem(SHEET_API_KEY_STORAGE, apiKey);
+        if(tabName) localStorage.setItem(SHEET_TAB_NAME_STORAGE, tabName);
+      }catch(e){}
+    }
+  }catch(err){
+    ANALYST_MAP = {};
+    sheetStatus = { loaded:false, loading:false, error: err.message || 'Could not load sheet', count:0 };
+  }
+  setSheetStatus();
+  if(DATA) renderErrors();
+}
+document.getElementById('sheet-url').value = DEFAULT_SHEET_URL;
+try{
+  document.getElementById('sheet-api-key').value = localStorage.getItem(SHEET_API_KEY_STORAGE) || '';
+  document.getElementById('sheet-tab-name').value = localStorage.getItem(SHEET_TAB_NAME_STORAGE) || '';
+}catch(e){}
+document.getElementById('sheet-load').addEventListener('click', loadAnalystSheet);
+document.getElementById('sheet-autorefresh').addEventListener('change', e=>{
+  if(e.target.checked){
+    loadAnalystSheet();
+    sheetAutoRefreshTimer = setInterval(loadAnalystSheet, 30000);
+  } else if(sheetAutoRefreshTimer){
+    clearInterval(sheetAutoRefreshTimer);
+    sheetAutoRefreshTimer = null;
+  }
+});
+if(document.getElementById('sheet-api-key').value){ loadAnalystSheet(); } // best-effort auto-load if a key is already saved
+
+/* Convert a game clock string like "8:32" into total seconds. */
+function clockToSeconds(clock){
+  const m = String(clock==null?'':clock).match(/^(\d+):(\d{2})$/);
+  if(!m) return null;
+  return parseInt(m[1],10)*60 + parseInt(m[2],10);
+}
+
+/* Given a half ("H1"/"H2") and a countdown game-clock reading for that half
+   (assumes a 20:00 countdown split into two 10-minute quarters — the
+   standard case this app's H1/H2 sheets are used for), resolve which
+   quarter (Q1-Q4) the possession actually falls in, based on the clock
+   rather than assuming every possession in H1 is Q1. */
+function resolveQuarterFromHalf(half, clockSeconds){
+  if(clockSeconds === null) return half; // unknown clock format — can't split further
+  const elapsed = clockSeconds <= 1200 ? (1200 - clockSeconds) : 0;
+  const inFirstTen = elapsed < 600;
+  if(half === 'H1') return inFirstTen ? 'Q1' : 'Q2';
+  if(half === 'H2') return inFirstTen ? 'Q3' : 'Q4';
+  return half;
+}
+
+/* Resolve the Q1-Q4 key for a possession row, splitting H1/H2 by game clock
+   when the JSON's own period is only a half. */
+function quarterKeyForRow(r){
+  const period = String(r.period||'').trim().toUpperCase();
+  if(/^Q[1-4]$/.test(period)) return period;
+  if(period === 'H1' || period === 'H2'){
+    const clockSec = clockToSeconds(r.f1 && (r.f1.end ?? r.f1.start));
+    return resolveQuarterFromHalf(period, clockSec);
+  }
+  return period;
+}
+
+/* Look up the annotation analyst and QC analyst name for one QC-error row
+   from the loaded Google Sheet, using DATA.gameId as the match key. Never
+   guesses — returns nulls when there's no matching sheet record. */
+function analystInfoForRow(r){
+  if(!DATA) return { analystName:null, qcAnalystName:null, noRecord:true };
+  const rec = ANALYST_MAP[DATA.gameId];
+  if(!rec) return { analystName:null, qcAnalystName:null, noRecord:true };
+  const qKey = quarterKeyForRow(r);
+  const qKeyLower = qKey.toLowerCase();
+  let analystName = rec[qKeyLower] || '';
+  if(!analystName){
+    // Sheet only tracks H1/H2 (no per-quarter split available) — fall back to the half-level name.
+    if((qKey==='Q1'||qKey==='Q2'||qKey==='H1') && rec.h1) analystName = rec.h1;
+    else if((qKey==='Q3'||qKey==='Q4'||qKey==='H2') && rec.h2) analystName = rec.h2;
+  }
+  return {
+    analystName: analystName || null,
+    qcAnalystName: rec.qcAnalystName || null,
+    noRecord: false,
+  };
+}
+
+/* ============ upload wiring ============ */
+function wireDrop(dropEl, inputEl, key, fnameEl){
+  dropEl.addEventListener('click', ()=> inputEl.click());
+  inputEl.addEventListener('change', e=>{ if(e.target.files[0]) setFile(key, e.target.files[0], fnameEl); });
+  dropEl.addEventListener('dragover', e=>{ e.preventDefault(); dropEl.classList.add('drag'); });
+  dropEl.addEventListener('dragleave', ()=> dropEl.classList.remove('drag'));
+  dropEl.addEventListener('drop', e=>{
+    e.preventDefault(); dropEl.classList.remove('drag');
+    if(e.dataTransfer.files[0]) setFile(key, e.dataTransfer.files[0], fnameEl);
+  });
+}
+function setFile(key, file, fnameEl){
+  files[key] = file;
+  fnameEl.textContent = file.name;
+  document.getElementById('compareBtn').disabled = !(files.a && files.b);
+}
+wireDrop(document.getElementById('drop1'), document.getElementById('file1'), 'a', document.getElementById('fname1'));
+wireDrop(document.getElementById('drop2'), document.getElementById('file2'), 'b', document.getElementById('fname2'));
+
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  files = { a:null, b:null };
+  document.getElementById('fname1').textContent = '';
+  document.getElementById('fname2').textContent = '';
+  document.getElementById('compareBtn').disabled = true;
+  document.getElementById('msgBox').innerHTML = '';
+});
+
+function readJsonFile(file){
+  return new Promise((resolve, reject)=>{
+    const r = new FileReader();
+    r.onload = ()=>{ try{ resolve(JSON.parse(r.result)); }catch(err){ reject(new Error(`"${file.name}" is not valid JSON (${err.message}).`)); } };
+    r.onerror = ()=> reject(new Error(`Could not read "${file.name}".`));
+    r.readAsText(file);
+  });
+}
+
+document.getElementById('compareBtn').addEventListener('click', async ()=>{
+  const msgBox = document.getElementById('msgBox');
+  msgBox.innerHTML = '';
+  try{
+    const [d1, d2] = await Promise.all([readJsonFile(files.a), readJsonFile(files.b)]);
+    if(!Array.isArray(d1) || !Array.isArray(d2)) throw new Error('Both files should be a JSON array of possession objects.');
+    if(d1.length===0 || d2.length===0) throw new Error('One of the files has no possessions.');
+    buildComparison(d1, d2, files.a.name, files.b.name);
+    if(d1.length !== d2.length){
+      msgBox.innerHTML = `<div class="warn-box">QC JSON has ${d1.length} possessions, Anno JSON has ${d2.length}. Comparing the first ${Math.min(d1.length,d2.length)} by order — the rest are unmatched.</div>`;
+    }
+    switchScreen('dashboard');
+  }catch(err){
+    msgBox.innerHTML = `<div class="error-box">${err.message}</div>`;
+  }
+});
+
+function buildComparison(d1, d2, name1, name2){
+  const n = Math.min(d1.length, d2.length);
+  const rows = [];
+  const fieldCounts = {}; FIELD_ORDER.forEach(f=>fieldCounts[f]=0);
+  for(let i=0;i<n;i++){
+    const e1 = extract(d1[i]);
+    const e2 = extract(d2[i]);
+    const diffs = FIELD_ORDER.filter(f => fieldDiffers(f, e1, e2));
+    diffs.forEach(f=>fieldCounts[f]++);
+    rows.push({ idx:i+1, period:e1.period, f1:e1, f2:e2, raw1:d1[i], raw2:d2[i], diffs });
+  }
+  rows.forEach(r=>{ r.errors = computeErrorsForRow(r); });
+  DATA = { rows, fieldCounts, total:n, file1Name:name1, file2Name:name2, gameId: d2[0].gameId ?? '-' };
+  document.getElementById('tab-dashboard').disabled = false;
+  document.getElementById('tab-table').disabled = false;
+  document.getElementById('tab-errors').disabled = false;
+  document.getElementById('files-line').textContent = `QC: ${name1}  ·  Anno: ${name2}  ·  ${n} possessions`;
+  errFilters = { search:'', period:'', errorTypes:new Set(), severity:'' };
+  document.getElementById('err-search').value = '';
+  populateErrorFilterOptions();
+  renderStats(); renderList(); renderGrid(); renderErrors();
+}
+
+/* ============ tab switching ============ */
+function switchScreen(name){
+  ['upload','dashboard','table','errors'].forEach(s=>{
+    document.getElementById('screen-'+s).classList.toggle('hidden', s!==name);
+    document.getElementById('tab-'+s).classList.toggle('active', s===name);
+  });
+}
+document.getElementById('tab-upload').addEventListener('click', ()=> switchScreen('upload'));
+document.getElementById('tab-dashboard').addEventListener('click', ()=>{ if(DATA) switchScreen('dashboard'); });
+document.getElementById('tab-table').addEventListener('click', ()=>{ if(DATA) switchScreen('table'); });
+document.getElementById('tab-errors').addEventListener('click', ()=>{ if(DATA) switchScreen('errors'); });
+
+/* ============ dashboard rendering ============ */
+function renderStats(){
+  const strip = document.getElementById('stats-strip');
+  strip.innerHTML = '';
+  FIELD_ORDER.forEach(f=>{
+    const n = DATA.fieldCounts[f];
+    const btn = document.createElement('button');
+    btn.className = 'stat-chip' + (activeFieldFilter===f ? ' active' : '');
+    btn.innerHTML = `<div class="n ${n===0?'zero':'nz'}">${n}</div><div class="lbl">${FIELD_LABELS[f]}</div>`;
+    btn.onclick = ()=>{ activeFieldFilter = (activeFieldFilter===f) ? null : f; renderStats(); renderList(); };
+    strip.appendChild(btn);
+  });
+}
+function matchesSearch(r, q){
+  if(!q) return true;
+  q = q.toLowerCase();
+  const hay = [r.period, r.f1.start, r.f1.end, r.f1.playByPlay, r.f2.playByPlay,
+    r.f1.isoPlayer, r.f2.isoPlayer, r.f1.offense, r.f2.offense,
+    r.f1.screenDetail, r.f2.screenDetail, String(r.idx)].join(' ').toLowerCase();
+  return hay.includes(q);
+}
+function renderList(){
+  const list = document.getElementById('poss-list');
+  const q = document.getElementById('search').value.trim();
+  const diffOnly = document.getElementById('diffOnly').checked;
+  list.innerHTML = '';
+  let shown = 0;
+  DATA.rows.forEach(r=>{
+    if(diffOnly && r.diffs.length===0) return;
+    if(activeFieldFilter && !r.diffs.includes(activeFieldFilter)) return;
+    if(!matchesSearch(r,q)) return;
+    shown++;
+    const row = document.createElement('div');
+    row.className = 'poss-row' + (r.idx===selectedIdx ? ' selected' : '');
+    row.innerHTML = `
+      <div class="left">
+        <div class="idx">#${r.idx} · ${r.period}</div>
+        <div class="clock">${r.f1.end ?? '—'}${r.f1.end!==r.f2.end ? ' / '+(r.f2.end ?? '—') : ''}</div>
+      </div>
+      <div class="badge ${r.diffs.length===0?'zero':''}">${r.diffs.length===0?'✓':r.diffs.length}</div>`;
+    row.onclick = ()=>{ selectedIdx=r.idx; renderList(); renderDetail(r); };
+    list.appendChild(row);
+  });
+  document.getElementById('count-line').textContent = `Showing ${shown} of ${DATA.total}`;
+}
+function fmt(v){
+  if(v===null || v===undefined || v==='') return '<span style="color:var(--text-dim)">—</span>';
+  return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+}
+function fieldRow(f, r){
+  const isDiff = r.diffs.includes(f);
+  return `<tr class="${isDiff?'diff':''}"><td class="field">${FIELD_LABELS[f]}</td><td class="val">${fmt(r.f1[f])}</td><td class="val">${fmt(r.f2[f])}</td></tr>`;
+}
+function renderDetail(r){
+  const el = document.getElementById('detail');
+  const rowsHtml = FIELD_ORDER.map(f=>fieldRow(f,r)).join('');
+  const errChips = r.errors.length
+    ? r.errors.map(e=>`<span class="badge-pill" style="background:${ERROR_COLORS[e.type]||'#5B6472'}" title="${fmt(e.field)}: QC=${fmt(e.qcVal)} · Anno=${fmt(e.annoVal)}">${e.type} → ${severityFor(e.type)}</span>`).join(' ')
+    : '<span style="color:var(--text-dim);font-size:12.5px;">No QC errors on this possession</span>';
+  el.innerHTML = `
+    <div class="detail-header"><h2>Possession #${r.idx}</h2><div class="period-clock">${r.period} · ${r.f1.start ?? '—'} → ${r.f1.end ?? '—'}</div></div>
+    <div class="pbp">
+      <div class="col f1"><span class="who">QC JSON</span>${fmt(r.f1.playByPlay)}</div>
+      <div class="col f2"><span class="who">Anno JSON</span>${fmt(r.f2.playByPlay)}</div>
+    </div>
+    <div style="margin-top:14px; display:flex; flex-wrap:wrap; gap:6px;">${errChips}</div>
+    <table class="compare"><thead><tr><th>Field</th><th class="f1col">QC</th><th class="f2col">Anno</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+}
+document.getElementById('search').addEventListener('input', renderList);
+document.getElementById('diffOnly').addEventListener('change', renderList);
+
+/* ============ table (grid) view ============ */
+function renderGrid(){
+  const table = document.getElementById('grid-table');
+  let thead = '<thead><tr><th class="idxcol">#</th><th>Period</th>';
+  FIELD_ORDER.forEach(f=>{ thead += `<th>${FIELD_LABELS[f]} QC</th><th>${FIELD_LABELS[f]} Anno</th>`; });
+  thead += '</tr></thead>';
+  let tbody = '<tbody>';
+  DATA.rows.forEach(r=>{
+    tbody += `<tr><td class="idxcol">${r.idx}</td><td>${r.period}</td>`;
+    FIELD_ORDER.forEach(f=>{
+      const isDiff = r.diffs.includes(f);
+      tbody += `<td class="f1${isDiff?' diff':''}">${fmt(r.f1[f])}</td><td class="f2${isDiff?' diff':''}">${fmt(r.f2[f])}</td>`;
+    });
+    tbody += '</tr>';
+  });
+  tbody += '</tbody>';
+  table.innerHTML = thead + tbody;
+  document.getElementById('table-count').textContent = `${DATA.total} possessions · ${DATA.rows.reduce((s,r)=>s+(r.diffs.length>0?1:0),0)} with at least one diff`;
+}
+
+/* ============ QC Errors view ============
+   QC JSON is the reference file. Every row below is an error IN THE ANNO JSON —
+   the QC JSON is read-only and is never itself flagged or altered. */
+function errorRows(){
+  const out = [];
+  DATA.rows.forEach(r=>{
+    const analystInfo = analystInfoForRow(r);
+    r.errors.forEach(e=>{
+      out.push({
+        gameId: DATA.gameId,
+        matchPriority: '',
+        quarterHalf: r.period,
+        errorType: e.type,
+        severity: severityFor(e.type),
+        time: r.f1.start,
+        field: e.field,
+        qcVal: e.qcVal,
+        annoVal: e.annoVal,
+        detail: `QC: ${e.qcVal}  →  Anno: ${e.annoVal}`,
+        idx: r.idx,
+        analystName: analystInfo.analystName,
+        qcAnalystName: analystInfo.qcAnalystName,
+        noSheetRecord: analystInfo.noRecord,
+      });
+    });
+  });
+  return out;
+}
+function populateErrorFilterOptions(){
+  const allRows = errorRows();
+  const periods = [...new Set(allRows.map(r=>r.quarterHalf))].sort();
+  const types = [...new Set(allRows.map(r=>r.errorType))].sort();
+  const severities = ['Major','Medium','Basic','Unknown'];
+  const periodSel = document.getElementById('err-period');
+  const sevSel = document.getElementById('err-severity');
+  periodSel.innerHTML = '<option value="">All Quarters/Halves</option>' + periods.map(p=>`<option value="${p}">${p}</option>`).join('');
+  sevSel.innerHTML = '<option value="">All Severities</option>' + severities.map(s=>`<option value="${s}">${s}</option>`).join('');
+  periodSel.value = ''; sevSel.value = '';
+
+  const optsWrap = document.getElementById('err-type-options');
+  optsWrap.innerHTML = types.map(t=>{
+    const safe = t.replace(/"/g,'&quot;');
+    return `<label class="ms-option">
+      <input type="checkbox" value="${safe}" class="err-type-cb">
+      <span class="swatch" style="background:${ERROR_COLORS[t]||'#5B6472'}"></span>
+      <span class="lbl">${t}</span>
+    </label>`;
+  }).join('');
+  updateErrTypeToggleLabel();
+}
+function updateErrTypeToggleLabel(){
+  const n = errFilters.errorTypes.size;
+  document.getElementById('err-type-toggle').textContent = n===0 ? 'All Error Types' : `${n} Error Type${n>1?'s':''} selected`;
+}
+function matchesErrFilters(er){
+  if(errFilters.period && er.quarterHalf !== errFilters.period) return false;
+  if(errFilters.errorTypes.size > 0 && !errFilters.errorTypes.has(er.errorType)) return false;
+  if(errFilters.severity && er.severity !== errFilters.severity) return false;
+  if(errFilters.search){
+    const q = errFilters.search.toLowerCase();
+    const hay = `${er.gameId} ${er.time} ${er.errorType} ${er.severity} ${er.quarterHalf} ${er.field} ${er.qcVal} ${er.annoVal} ${er.analystName||''} ${er.qcAnalystName||''}`.toLowerCase();
+    if(!hay.includes(q)) return false;
+  }
+  return true;
+}
+function renderErrors(){
+  const allRows = errorRows();
+  const rows = allRows.filter(matchesErrFilters);
+  const table = document.getElementById('errors-table');
+  const emptyEl = document.getElementById('errors-empty');
+
+  if(rows.length===0){
+    table.classList.add('hidden'); table.innerHTML = '';
+    emptyEl.classList.remove('hidden');
+    emptyEl.textContent = allRows.length===0
+      ? 'No QC errors detected between the two files.'
+      : 'No errors match the current filters.';
+    document.getElementById('errors-count').textContent = allRows.length===0 ? '0 errors' : `0 of ${allRows.length} errors shown`;
+    return;
+  }
+  table.classList.remove('hidden');
+  emptyEl.classList.add('hidden');
+
+  let thead = '<thead><tr><th>Game Id</th><th>Match Priority</th><th>Quarter/Half</th><th>Error Type</th><th>Severity</th><th>Time</th><th>Field / Path</th><th>QC Reference Value</th><th>Annotation JSON Value</th><th>Analyst Name</th><th>QC Analyst Name</th></tr></thead>';
+  let tbody = '<tbody>';
+  rows.forEach(er=>{
+    const analystCell = er.noSheetRecord
+      ? '<span class="analyst-none" title="No matching Game ID in the sheet">No sheet match</span>'
+      : fmt(er.analystName);
+    const qcAnalystCell = er.noSheetRecord
+      ? '<span class="analyst-none" title="No matching Game ID in the sheet">No sheet match</span>'
+      : fmt(er.qcAnalystName);
+    tbody += `<tr>
+      <td class="gameid">${fmt(er.gameId)}</td>
+      <td>${fmt(er.matchPriority)}</td>
+      <td>${fmt(er.quarterHalf)}</td>
+      <td><span class="badge-pill" style="background:${ERROR_COLORS[er.errorType]||'#5B6472'}">${er.errorType}</span></td>
+      <td><span class="badge-pill" style="background:${SEVERITY_COLORS[er.severity]}">${er.severity}</span></td>
+      <td class="time">${fmt(er.time)}</td>
+      <td class="gameid">${fmt(er.field)}</td>
+      <td class="time" style="color:var(--f1)">${fmt(er.qcVal)}</td>
+      <td class="time" style="color:var(--f2)">${fmt(er.annoVal)}</td>
+      <td>${analystCell}</td>
+      <td>${qcAnalystCell}</td>
+    </tr>`;
+  });
+  tbody += '</tbody>';
+  table.innerHTML = thead + tbody;
+  document.getElementById('errors-count').textContent = rows.length===allRows.length
+    ? `${rows.length} errors across ${new Set(rows.map(r=>r.idx)).size} possessions`
+    : `${rows.length} of ${allRows.length} errors shown`;
+}
+document.getElementById('err-search').addEventListener('input', e=>{ errFilters.search = e.target.value.trim(); renderErrors(); });
+document.getElementById('err-period').addEventListener('change', e=>{ errFilters.period = e.target.value; renderErrors(); });
+document.getElementById('err-severity').addEventListener('change', e=>{ errFilters.severity = e.target.value; renderErrors(); });
+
+/* ---- multi-select "Error Type" dropdown ---- */
+document.getElementById('err-type-toggle').addEventListener('click', e=>{
+  e.stopPropagation();
+  document.getElementById('err-type-panel').classList.toggle('hidden');
+});
+document.getElementById('err-type-options').addEventListener('change', e=>{
+  if(!e.target.classList.contains('err-type-cb')) return;
+  if(e.target.checked) errFilters.errorTypes.add(e.target.value);
+  else errFilters.errorTypes.delete(e.target.value);
+  updateErrTypeToggleLabel();
+  renderErrors();
+});
+document.getElementById('err-type-all').addEventListener('click', ()=>{
+  document.querySelectorAll('.err-type-cb').forEach(cb=>{ cb.checked = true; errFilters.errorTypes.add(cb.value); });
+  updateErrTypeToggleLabel();
+  renderErrors();
+});
+document.getElementById('err-type-none').addEventListener('click', ()=>{
+  document.querySelectorAll('.err-type-cb').forEach(cb=>{ cb.checked = false; });
+  errFilters.errorTypes.clear();
+  updateErrTypeToggleLabel();
+  renderErrors();
+});
+document.addEventListener('click', e=>{
+  const wrap = document.getElementById('err-type-wrap');
+  if(wrap && !wrap.contains(e.target)) document.getElementById('err-type-panel').classList.add('hidden');
+});
+
+document.getElementById('err-clear').addEventListener('click', ()=>{
+  errFilters = { search:'', period:'', errorTypes:new Set(), severity:'' };
+  document.getElementById('err-search').value = '';
+  document.getElementById('err-period').value = '';
+  document.getElementById('err-severity').value = '';
+  document.querySelectorAll('.err-type-cb').forEach(cb=> cb.checked = false);
+  updateErrTypeToggleLabel();
+  renderErrors();
+});
+
+/* ============ CSV export (plain browser download — works fully offline) ============ */
+function csvEscape(v){
+  if(v===null||v===undefined) return '';
+  const s = String(v);
+  return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+function saveCsv(filename, csv){
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+document.getElementById('exportCsv').addEventListener('click', async ()=>{
+  if(!DATA) return;
+  const header = ['#','Period'];
+  FIELD_ORDER.forEach(f=>{ header.push(FIELD_LABELS[f]+' QC', FIELD_LABELS[f]+' Anno'); });
+  const lines = [header.map(csvEscape).join(',')];
+  DATA.rows.forEach(r=>{
+    const row = [r.idx, r.period];
+    FIELD_ORDER.forEach(f=>{ row.push(r.f1[f], r.f2[f]); });
+    lines.push(row.map(csvEscape).join(','));
+  });
+  saveCsv('possession_comparison.csv', lines.join('\n'));
+});
+
+document.getElementById('exportErrorsCsv').addEventListener('click', async ()=>{
+  if(!DATA) return;
+  const rows = errorRows().filter(matchesErrFilters);
+  const header = ['Game Id','Match Priority','Quarter/Half','Error Type','Severity','Time','Field / Path','QC Reference Value','Annotation JSON Value','Analyst Name','QC Analyst Name'];
+  const lines = [header.map(csvEscape).join(',')];
+  rows.forEach(er=>{
+    const analystName = er.noSheetRecord ? 'No sheet match' : (er.analystName || '');
+    const qcAnalystName = er.noSheetRecord ? 'No sheet match' : (er.qcAnalystName || '');
+    lines.push([er.gameId, er.matchPriority, er.quarterHalf, er.errorType, er.severity, er.time, er.field, er.qcVal, er.annoVal, analystName, qcAnalystName].map(csvEscape).join(','));
+  });
+  saveCsv('anno_qc_errors.csv', lines.join('\n'));
+});
+</script>
+</body>
+</html>

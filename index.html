@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>ShotTracker_Training_Auto_QC</title>
+<title>Possession QC Tool</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -202,9 +202,9 @@
 <div id="login-overlay">
   <form class="login-card" id="login-form">
     <div class="icon">🔒</div>
-    <h2>ShotTracker_Training_Auto_QC</h2>
+    <h2>Possession QC Tool</h2>
     <p>Sign in to continue. Access resets when this browser tab is closed.</p>
-    <input type="text" id="login-id" placeholder="Login ID" autocomplete="username" autofocus>
+    <input type="email" id="login-id" placeholder="Email" autocomplete="username" autofocus>
     <input type="password" id="login-pw" placeholder="Password" autocomplete="current-password">
     <button type="submit" class="btn primary">Unlock</button>
     <div class="login-error" id="login-error"></div>
@@ -214,7 +214,7 @@
 <div id="app-shell" class="hidden">
 <header>
   <div>
-    <h1><span>ShotTracker</span>_Training_Auto_QC</h1>
+    <h1>Possession <span>QC</span> Tool</h1>
     <div class="files-line" id="files-line"></div>
   </div>
   <div class="tabs">
@@ -324,19 +324,24 @@
 </div>
 </div><!-- /app-shell -->
 
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script>
-/* ============ login gate ============
-   Client-side only: this hides the tool from casual/uninvited use, but this is a
-   static HTML file with no server, so it is not real security — anyone with dev
-   tools can bypass it. There is no password-reset flow; the password below is fixed. */
-const LOGIN_ID = "ganeshsprivan";
-const PASSWORD_HASH = "fdca1a90153c71a286786552743d9a64bdccb3d0e2f7e87542e00fb34c6a36f8"; // sha256("Mahakal@512")
-const AUTH_KEY = 'qc_tool_auth_v1';
+/* ============ login gate (Firebase Authentication) ============
+   Real accounts, managed only from the Firebase console's Authentication > Users tab.
+   Users cannot self-register, reset passwords, or delete accounts from this page —
+   only whoever has access to the Firebase console can do that. */
+const firebaseConfig = {
+  apiKey: "AIzaSyAvXCKIKQiEKkKL2dKvkILAgziZfgkv1vE",
+  authDomain: "shottracker-qc-2638d.firebaseapp.com",
+  projectId: "shottracker-qc-2638d",
+  storageBucket: "shottracker-qc-2638d.firebasestorage.app",
+  messagingSenderId: "475802433746",
+  appId: "1:475802433746:web:400372d1defbe4c55e950b"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
 
-async function sha256Hex(str){
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-}
 function showApp(){
   document.getElementById('login-overlay').classList.add('hidden');
   document.getElementById('app-shell').classList.remove('hidden');
@@ -352,24 +357,30 @@ function showLoginForm(){
 
 document.getElementById('login-form').addEventListener('submit', async e=>{
   e.preventDefault();
-  const id = document.getElementById('login-id').value.trim();
+  const email = document.getElementById('login-id').value.trim();
   const pw = document.getElementById('login-pw').value;
-  const hash = await sha256Hex(pw);
   const errEl = document.getElementById('login-error');
-  if(id.toLowerCase() === LOGIN_ID.toLowerCase() && hash === PASSWORD_HASH){
-    sessionStorage.setItem(AUTH_KEY, '1');
-    errEl.textContent = '';
-    showApp();
-  }else{
-    errEl.textContent = 'Incorrect ID or password.';
+  errEl.textContent = '';
+  try{
+    await auth.signInWithEmailAndPassword(email, pw);
+    // showApp() runs via onAuthStateChanged below
+  }catch(err){
+    errEl.textContent = 'Incorrect email or password.';
   }
 });
 
 document.getElementById('logoutBtn').addEventListener('click', ()=>{
-  sessionStorage.removeItem(AUTH_KEY);
-  showLoginForm();
+  auth.signOut();
 });
-if(sessionStorage.getItem(AUTH_KEY) === '1'){ showApp(); } else { showLoginForm(); }
+
+auth.onAuthStateChanged(user=>{
+  if(user){
+    showApp();
+  } else {
+    showLoginForm();
+  }
+});
+
 
 /* ============ extraction logic (ported from the possessiondata schema) ============ */
 const SCREEN_SUBTYPES = [

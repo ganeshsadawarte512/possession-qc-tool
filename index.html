@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Possession QC Tool</title>
+<title>ShotTracker_Training_Auto_QC</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -202,9 +202,9 @@
 <div id="login-overlay">
   <form class="login-card" id="login-form">
     <div class="icon">🔒</div>
-    <h2>Possession QC Tool</h2>
+    <h2>ShotTracker_Training_Auto_QC</h2>
     <p>Sign in to continue. Access resets when this browser tab is closed.</p>
-    <input type="email" id="login-id" placeholder="Email" autocomplete="username" autofocus>
+    <input type="text" id="login-id" placeholder="Login ID" autocomplete="username" autofocus>
     <input type="password" id="login-pw" placeholder="Password" autocomplete="current-password">
     <button type="submit" class="btn primary">Unlock</button>
     <div class="login-error" id="login-error"></div>
@@ -214,7 +214,7 @@
 <div id="app-shell" class="hidden">
 <header>
   <div>
-    <h1>Possession <span>QC</span> Tool</h1>
+    <h1><span>ShotTracker</span>_Training_Auto_QC</h1>
     <div class="files-line" id="files-line"></div>
   </div>
   <div class="tabs">
@@ -222,6 +222,7 @@
     <button id="tab-dashboard" disabled>Dashboard</button>
     <button id="tab-table" disabled>Table</button>
     <button id="tab-errors" disabled>QC Errors</button>
+    <button id="tab-history">History</button>
   </div>
   <button class="btn small" id="logoutBtn" style="margin-left:8px;">Log out</button>
 </header>
@@ -322,26 +323,34 @@
     <div class="empty-errors hidden" id="errors-empty"></div>
   </div>
 </div>
+<!-- ================= HISTORY SCREEN ================= -->
+<div id="screen-history" class="hidden">
+  <div class="table-toolbar">
+    <div><div style="font-size:14px;font-weight:600;">Saved Comparison History</div><div class="count-line" id="history-count">0 saved comparisons</div></div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input type="text" id="history-search" placeholder="Search Game ID..." style="background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:var(--radius);padding:6px 9px;font-size:12px;">
+      <button class="btn small" id="refreshHistory">Refresh</button>
+      <button class="btn small" id="clearHistory">Clear saved history</button>
+    </div>
+  </div>
+  <div class="errors-wrap"><table class="errors" id="history-table"></table><div class="empty-errors hidden" id="history-empty"></div></div>
+</div>
+
 </div><!-- /app-shell -->
 
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script>
-/* ============ login gate (Firebase Authentication) ============
-   Real accounts, managed only from the Firebase console's Authentication > Users tab.
-   Users cannot self-register, reset passwords, or delete accounts from this page —
-   only whoever has access to the Firebase console can do that. */
-const firebaseConfig = {
-  apiKey: "AIzaSyAvXCKIKQiEKkKL2dKvkILAgziZfgkv1vE",
-  authDomain: "shottracker-qc-2638d.firebaseapp.com",
-  projectId: "shottracker-qc-2638d",
-  storageBucket: "shottracker-qc-2638d.firebasestorage.app",
-  messagingSenderId: "475802433746",
-  appId: "1:475802433746:web:400372d1defbe4c55e950b"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
+/* ============ login gate ============
+   Client-side only: this hides the tool from casual/uninvited use, but this is a
+   static HTML file with no server, so it is not real security — anyone with dev
+   tools can bypass it. There is no password-reset flow; the password below is fixed. */
+const LOGIN_ID = "ganeshsprivan";
+const PASSWORD_HASH = "fdca1a90153c71a286786552743d9a64bdccb3d0e2f7e87542e00fb34c6a36f8"; // sha256("Mahakal@512")
+const AUTH_KEY = 'qc_tool_auth_v1';
 
+async function sha256Hex(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
 function showApp(){
   document.getElementById('login-overlay').classList.add('hidden');
   document.getElementById('app-shell').classList.remove('hidden');
@@ -357,30 +366,24 @@ function showLoginForm(){
 
 document.getElementById('login-form').addEventListener('submit', async e=>{
   e.preventDefault();
-  const email = document.getElementById('login-id').value.trim();
+  const id = document.getElementById('login-id').value.trim();
   const pw = document.getElementById('login-pw').value;
+  const hash = await sha256Hex(pw);
   const errEl = document.getElementById('login-error');
-  errEl.textContent = '';
-  try{
-    await auth.signInWithEmailAndPassword(email, pw);
-    // showApp() runs via onAuthStateChanged below
-  }catch(err){
-    errEl.textContent = 'Incorrect email or password.';
+  if(id.toLowerCase() === LOGIN_ID.toLowerCase() && hash === PASSWORD_HASH){
+    sessionStorage.setItem(AUTH_KEY, '1');
+    errEl.textContent = '';
+    showApp();
+  }else{
+    errEl.textContent = 'Incorrect ID or password.';
   }
 });
 
 document.getElementById('logoutBtn').addEventListener('click', ()=>{
-  auth.signOut();
+  sessionStorage.removeItem(AUTH_KEY);
+  showLoginForm();
 });
-
-auth.onAuthStateChanged(user=>{
-  if(user){
-    showApp();
-  } else {
-    showLoginForm();
-  }
-});
-
+if(sessionStorage.getItem(AUTH_KEY) === '1'){ showApp(); } else { showLoginForm(); }
 
 /* ============ extraction logic (ported from the possessiondata schema) ============ */
 const SCREEN_SUBTYPES = [
@@ -887,6 +890,90 @@ function analystInfoForRow(r){
   };
 }
 
+/* ============ persistent comparison storage ============ */
+const DB_NAME='ShotTracker_QC_Compare_DB', DB_VERSION=1;
+const STORE_COMPARISONS='comparisons', STORE_RECORDS='records';
+let dbPromise=null;
+function makeComparisonId(gameId){
+  const safe=String(gameId||'UNKNOWN').replace(/[^a-zA-Z0-9_-]/g,'_');
+  return `${safe}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+}
+function openQCDB(){
+  if(dbPromise) return dbPromise;
+  dbPromise=new Promise((resolve,reject)=>{
+    if(!window.indexedDB){ reject(new Error('IndexedDB unavailable')); return; }
+    const req=indexedDB.open(DB_NAME,DB_VERSION);
+    req.onupgradeneeded=e=>{
+      const db=e.target.result;
+      if(!db.objectStoreNames.contains(STORE_COMPARISONS)){
+        const st=db.createObjectStore(STORE_COMPARISONS,{keyPath:'comparisonId'});
+        st.createIndex('gameId','gameId',{unique:false}); st.createIndex('createdAt','createdAt',{unique:false});
+      }
+      if(!db.objectStoreNames.contains(STORE_RECORDS)){
+        const st=db.createObjectStore(STORE_RECORDS,{keyPath:'recordKey'});
+        st.createIndex('comparisonId','comparisonId',{unique:false}); st.createIndex('gameId','gameId',{unique:false});
+      }
+    };
+    req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error||new Error('DB open failed'));
+  });
+  return dbPromise;
+}
+function fallbackKey(type,id){return `shottracker_qc_${type}_${id}`;}
+async function saveComparisonPersistently(d1,d2,data){
+  const meta={comparisonId:data.comparisonId,gameId:data.gameId,createdAt:data.createdAt,file1Name:data.file1Name,file2Name:data.file2Name,
+    qcRecordCount:d1.length,annoRecordCount:d2.length,comparedRecordCount:data.rows.length,
+    unmatchedQcRecords:Math.max(0,d1.length-data.rows.length),unmatchedAnnoRecords:Math.max(0,d2.length-data.rows.length),
+    differenceRecordCount:data.rows.reduce((n,r)=>n+r.diffs.length,0),errorCount:data.rows.reduce((n,r)=>n+r.errors.length,0),
+    fieldCounts:data.fieldCounts,savedRecordCount:data.rows.length,status:'Completed'};
+  try{
+    const db=await openQCDB();
+    await new Promise((resolve,reject)=>{
+      const tx=db.transaction([STORE_COMPARISONS,STORE_RECORDS],'readwrite');
+      tx.objectStore(STORE_COMPARISONS).put({...meta,qcJson:d1,annoJson:d2});
+      data.rows.forEach(r=>tx.objectStore(STORE_RECORDS).put({recordKey:`${data.comparisonId}__${r.idx}`,comparisonId:data.comparisonId,gameId:data.gameId,createdAt:data.createdAt,idx:r.idx,period:r.period,diffs:r.diffs,errors:r.errors,qc:r.raw1,anno:r.raw2,extractedQC:r.f1,extractedAnno:r.f2}));
+      tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error||new Error('Save failed')); tx.onabort=()=>reject(tx.error||new Error('Save aborted'));
+    });
+    return 'IndexedDB';
+  }catch(e){
+    try{
+      localStorage.setItem(fallbackKey('comparison',data.comparisonId),JSON.stringify({...meta,qcJson:d1,annoJson:d2}));
+      data.rows.forEach(r=>localStorage.setItem(fallbackKey('record',`${data.comparisonId}__${r.idx}`),JSON.stringify({recordKey:`${data.comparisonId}__${r.idx}`,comparisonId:data.comparisonId,gameId:data.gameId,createdAt:data.createdAt,idx:r.idx,period:r.period,diffs:r.diffs,errors:r.errors,qc:r.raw1,anno:r.raw2,extractedQC:r.f1,extractedAnno:r.f2})));
+      return 'localStorage';
+    }catch(f){throw new Error('Permanent save failed: '+f.message);}
+  }
+}
+async function getSavedComparisons(){
+  try{const db=await openQCDB();return await new Promise((resolve,reject)=>{const req=db.transaction(STORE_COMPARISONS,'readonly').objectStore(STORE_COMPARISONS).getAll();req.onsuccess=()=>resolve((req.result||[]).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt))));req.onerror=()=>reject(req.error);});}
+  catch(e){const out=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(fallbackKey('comparison',''))){try{out.push(JSON.parse(localStorage.getItem(k)));}catch(x){}}}return out.sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));}
+}
+async function getSavedRecords(id){
+  try{const db=await openQCDB();return await new Promise((resolve,reject)=>{const req=db.transaction(STORE_RECORDS,'readonly').objectStore(STORE_RECORDS).index('comparisonId').getAll(id);req.onsuccess=()=>resolve((req.result||[]).sort((a,b)=>a.idx-b.idx));req.onerror=()=>reject(req.error);});}
+  catch(e){const out=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(fallbackKey('record',id+'__'))){try{out.push(JSON.parse(localStorage.getItem(k)));}catch(x){}}}return out.sort((a,b)=>a.idx-b.idx);}
+}
+async function renderHistory(){
+  const table=document.getElementById('history-table'), empty=document.getElementById('history-empty'), q=(document.getElementById('history-search').value||'').trim().toLowerCase();
+  let items=await getSavedComparisons(); if(q) items=items.filter(x=>String(x.gameId||'').toLowerCase().includes(q));
+  document.getElementById('history-count').textContent=`${items.length} saved comparison${items.length===1?'':'s'}`;
+  if(!items.length){table.classList.add('hidden');empty.classList.remove('hidden');empty.textContent='No saved comparisons found.';return;}
+  table.classList.remove('hidden');empty.classList.add('hidden');
+  let h='<thead><tr><th>Game ID</th><th>Saved At</th><th>QC</th><th>Anno</th><th>Saved Records</th><th>Differences</th><th>Errors</th><th>Action</th></tr></thead><tbody>';
+  items.forEach(x=>h+=`<tr><td class="gameid">${fmt(x.gameId)}</td><td class="time">${fmt(x.createdAt)}</td><td>${x.qcRecordCount}</td><td>${x.annoRecordCount}</td><td>${x.savedRecordCount}</td><td>${x.differenceRecordCount}</td><td>${x.errorCount}</td><td><button class="btn small" data-load="${encodeURIComponent(x.comparisonId)}">Load</button></td></tr>`);
+  table.innerHTML=h+'</tbody>';
+  table.querySelectorAll('[data-load]').forEach(btn=>btn.onclick=async()=>{
+    const id=decodeURIComponent(btn.dataset.load), metas=await getSavedComparisons(), m=metas.find(x=>x.comparisonId===id), rs=await getSavedRecords(id); if(!m||!rs.length)return;
+    const rows=rs.map(r=>({idx:r.idx,period:r.period,f1:r.extractedQC,f2:r.extractedAnno,raw1:r.qc,raw2:r.anno,diffs:r.diffs,errors:r.errors}));
+    const fc={};FIELD_ORDER.forEach(f=>fc[f]=rows.filter(r=>r.diffs.includes(f)).length);
+    DATA={rows,fieldCounts:fc,total:rows.length,file1Name:m.file1Name,file2Name:m.file2Name,gameId:m.gameId,comparisonId:m.comparisonId,createdAt:m.createdAt};
+    document.getElementById('tab-dashboard').disabled=false;document.getElementById('tab-table').disabled=false;document.getElementById('tab-errors').disabled=false;
+    document.getElementById('files-line').textContent=`QC: ${m.file1Name} · Anno: ${m.file2Name} · ${rows.length} possessions · ${m.comparisonId}`;
+    populateErrorFilterOptions();renderStats();renderList();renderGrid();renderErrors();switchScreen('dashboard');
+  });
+}
+document.getElementById('tab-history').addEventListener('click',async()=>{switchScreen('history');await renderHistory();});
+document.getElementById('history-search').addEventListener('input',renderHistory);
+document.getElementById('refreshHistory').addEventListener('click',renderHistory);
+document.getElementById('clearHistory').addEventListener('click',async()=>{if(!confirm('Delete all saved comparison records from this browser?'))return;try{const db=await openQCDB();await new Promise((res,rej)=>{const tx=db.transaction([STORE_COMPARISONS,STORE_RECORDS],'readwrite');tx.objectStore(STORE_COMPARISONS).clear();tx.objectStore(STORE_RECORDS).clear();tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});}catch(e){}for(let i=localStorage.length-1;i>=0;i--){const k=localStorage.key(i);if(k&&k.startsWith('shottracker_qc_'))localStorage.removeItem(k);}await renderHistory();});
+
 /* ============ upload wiring ============ */
 function wireDrop(dropEl, inputEl, key, fnameEl){
   dropEl.addEventListener('click', ()=> inputEl.click());
@@ -931,9 +1018,13 @@ document.getElementById('compareBtn').addEventListener('click', async ()=>{
     if(!Array.isArray(d1) || !Array.isArray(d2)) throw new Error('Both files should be a JSON array of possession objects.');
     if(d1.length===0 || d2.length===0) throw new Error('One of the files has no possessions.');
     buildComparison(d1, d2, files.a.name, files.b.name);
+    msgBox.innerHTML = '<div class="warn-box">Comparison completed. Saving every possession record and the original QC/Anno JSON…</div>';
+    const storageUsed = await saveComparisonPersistently(d1, d2, DATA);
+    let extraMsg = '';
     if(d1.length !== d2.length){
-      msgBox.innerHTML = `<div class="warn-box">QC JSON has ${d1.length} possessions, Anno JSON has ${d2.length}. Comparing the first ${Math.min(d1.length,d2.length)} by order — the rest are unmatched.</div>`;
+      extraMsg = `<div class="warn-box">QC JSON has ${d1.length} possessions, Anno JSON has ${d2.length}. Comparing the first ${Math.min(d1.length,d2.length)} by order — the rest are unmatched.</div>`;
     }
+    msgBox.innerHTML = `<div class="warn-box" style="color:var(--ok);border-color:var(--ok);background:rgba(79,191,139,.10);">✓ Comparison saved successfully.<br>Game ID: <strong>${fmt(DATA.gameId)}</strong> · Comparison ID: <strong>${fmt(DATA.comparisonId)}</strong> · <strong>${DATA.rows.length}</strong> records saved · Storage: ${storageUsed}</div>${extraMsg}`;
     switchScreen('dashboard');
   }catch(err){
     msgBox.innerHTML = `<div class="error-box">${err.message}</div>`;
@@ -952,11 +1043,14 @@ function buildComparison(d1, d2, name1, name2){
     rows.push({ idx:i+1, period:e1.period, f1:e1, f2:e2, raw1:d1[i], raw2:d2[i], diffs });
   }
   rows.forEach(r=>{ r.errors = computeErrorsForRow(r); });
-  DATA = { rows, fieldCounts, total:n, file1Name:name1, file2Name:name2, gameId: d2[0].gameId ?? '-' };
+  const gameId = d2[0].gameId ?? d1[0].gameId ?? '-';
+  const comparisonId = makeComparisonId(gameId);
+  const createdAt = new Date().toLocaleString();
+  DATA = { rows, fieldCounts, total:n, file1Name:name1, file2Name:name2, gameId, comparisonId, createdAt, qcRecordCount:d1.length, annoRecordCount:d2.length };
   document.getElementById('tab-dashboard').disabled = false;
   document.getElementById('tab-table').disabled = false;
   document.getElementById('tab-errors').disabled = false;
-  document.getElementById('files-line').textContent = `QC: ${name1}  ·  Anno: ${name2}  ·  ${n} possessions`;
+  document.getElementById('files-line').textContent = `QC: ${name1}  ·  Anno: ${name2}  ·  ${n} possessions · ${comparisonId}`;
   errFilters = { search:'', period:'', errorTypes:new Set(), severity:'' };
   document.getElementById('err-search').value = '';
   populateErrorFilterOptions();
@@ -965,7 +1059,7 @@ function buildComparison(d1, d2, name1, name2){
 
 /* ============ tab switching ============ */
 function switchScreen(name){
-  ['upload','dashboard','table','errors'].forEach(s=>{
+  ['upload','dashboard','table','errors','history'].forEach(s=>{
     document.getElementById('screen-'+s).classList.toggle('hidden', s!==name);
     document.getElementById('tab-'+s).classList.toggle('active', s===name);
   });
